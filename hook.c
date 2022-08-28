@@ -87,7 +87,8 @@ int __kprobes close_pre(struct kprobe *kp, struct pt_regs *regs)
 	int fput_needed;
 	struct socket *sock;
 	struct sockaddr_storage addr;
-	struct sockaddr_in *in;
+	struct sockaddr_in *remote_addr;
+	struct sockaddr_in *local_addr;
 	uint8_t *addrs;
 
 	fd = (int)regs->si;
@@ -98,13 +99,22 @@ int __kprobes close_pre(struct kprobe *kp, struct pt_regs *regs)
 
 	if (kernel_getpeername(sock, (struct sockaddr *)&addr) < 0)
 		goto out;
-
 	if (addr.ss_family == AF_INET) {
-		in = (struct sockaddr_in *)&addr;
-		addrs = (uint8_t *)&in->sin_addr.s_addr;
+		remote_addr = (struct sockaddr_in *)&addr;
+		addrs = (uint8_t *)&remote_addr->sin_addr.s_addr;
 		pr_info("close -- Handle Pre - proc=%s pid=%d fd=%d remote_addr=%d.%d.%d.%d:%d\n",
 			current->comm, current->pid, fd, addrs[0], addrs[1], addrs[2], addrs[3],
-			ntohs(in->sin_port));
+			ntohs(remote_addr->sin_port));
+	}
+
+	if (kernel_getsockname(sock, (struct sockaddr *)&addr) < 0)
+		goto out;
+	if (addr.ss_family == AF_INET) {
+		local_addr = (struct sockaddr_in *)&addr;
+		addrs = (uint8_t *)&local_addr->sin_addr.s_addr;
+		pr_info("close -- Handle Pre - proc=%s pid=%d fd=%d local_addr=%d.%d.%d.%d:%d\n",
+			current->comm, current->pid, fd, addrs[0], addrs[1], addrs[2], addrs[3],
+			ntohs(local_addr->sin_port));
 	}
 
 out:
