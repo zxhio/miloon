@@ -123,6 +123,45 @@ out:
 	return 0;
 }
 
+void __kprobes write_post(struct kprobe *kp, struct pt_regs *regs, unsigned long flags)
+{
+	int fd;
+
+	fd = (int)regs->di;
+
+	// TODO: remove echo test binary
+	if (!strstr(current->comm, "echo"))
+		return;
+
+	pr_info("write -- Handle Post - pid=%d fd=%d\n", current->pid, fd);
+
+	return;
+}
+
+#define EMBEDDED_NAME_MAX (PATH_MAX - offsetof(struct filename, iname))
+
+void __kprobes open_post(struct kprobe *kp, struct pt_regs *regs, unsigned long flags)
+{
+	// int fd;
+	int name_len;
+	char filename[EMBEDDED_NAME_MAX];
+
+	// TODO: remove a.out test binnay
+	if (strcmp(current->comm, "a.out"))
+		return;
+
+	name_len = strncpy_from_user(filename, (const char *)regs->si, EMBEDDED_NAME_MAX);
+	if (name_len < 0) {
+		return;
+	}
+	filename[name_len] = '\0';
+
+	pr_info("open -- Handle Post - proc=%s pid=%d filename=%s\n", current->comm, current->pid,
+		filename);
+
+	return;
+}
+
 static char recvfrom_symbol[MAX_SYMBOL_LEN] = "__sys_recvfrom";
 static struct kprobe kp_recvfrom = {
 	.symbol_name = recvfrom_symbol,
@@ -135,22 +174,34 @@ static struct kprobe kp_close = {
 	.pre_handler = close_pre,
 };
 
+static char write_symbol[MAX_SYMBOL_LEN] = "ksys_write";
+static struct kprobe kp_write = {
+	.symbol_name = write_symbol,
+	.post_handler = write_post,
+};
+
+static char open_symbol[MAX_SYMBOL_LEN] = "do_sys_openat2";
+static struct kprobe kp_open = {
+	.symbol_name = open_symbol,
+	.post_handler = open_post,
+};
+
+static struct kprobe *hook_list[] = {
+	&kp_recvfrom, &kp_close, &kp_write, &kp_open, NULL,
+};
+
 int __init hook_init(void)
 {
 	int ret;
+	struct kprobe **probe;
 
-	pr_info("kprobe register - %s\n", kp_recvfrom.symbol_name);
-	ret = register_kprobe(&kp_recvfrom);
-	if (ret < 0) {
-		pr_err("kprobe register err: %d\n", ret);
-		return ret;
-	}
-
-	pr_info("kprobe register - %s\n", kp_close.symbol_name);
-	ret = register_kprobe(&kp_close);
-	if (ret < 0) {
-		pr_err("kprobe register err: %d\n", ret);
-		return ret;
+	for (probe = hook_list; *probe != NULL; probe++) {
+		pr_info("kprobe register - %s\n", (*probe)->symbol_name);
+		ret = register_kprobe(*probe);
+		if (ret < 0) {
+			pr_err("kprobe register err: %d\n", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -158,11 +209,12 @@ int __init hook_init(void)
 
 void __exit hook_exit(void)
 {
-	unregister_kprobe(&kp_recvfrom);
-	pr_info("kprobe unregister - %s\n", kp_recvfrom.symbol_name);
+	struct kprobe **probe;
 
-	unregister_kprobe(&kp_close);
-	pr_info("kprobe unregister - %s\n", kp_close.symbol_name);
+	for (probe = hook_list; *probe != NULL; probe++) {
+		unregister_kprobe(*probe);
+		pr_info("kprobe unregister - %s\n", (*probe)->symbol_name);
+	}
 }
 
 module_init(hook_init) module_exit(hook_exit) MODULE_LICENSE("GPL");

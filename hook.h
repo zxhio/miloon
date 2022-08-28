@@ -18,3 +18,9 @@ void __kprobes recvfrom_post(struct kprobe *, struct pt_regs *, unsigned long);
 
 // close kprobe
 int __kprobes close_pre(struct kprobe *, struct pt_regs *);
+
+// write kprobe
+void __kprobes write_post(struct kprobe *, struct pt_regs *, unsigned long);
+
+// open kprobe
+void __kprobes open_post(struct kprobe *, struct pt_regs *, unsigned long);
